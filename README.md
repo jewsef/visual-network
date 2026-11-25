@@ -10,6 +10,8 @@ Open `index.html` in a browser. Everything runs in the page, and your data is ne
 2. Drop `Connections.csv` onto the page, or the whole export zip. Zips, nested zips and gzip files all work.
 3. Or press the demo button to try it with sample data.
 
+Profile photos: LinkedIn's export has none, so add them yourself. Drop images or a zip of images named like `First Last.jpg` with the Add photos button, or add one from a person's card. A `Photo URL` column in the CSV also works. Photos are resized and stored in your browser only.
+
 Company logos load from public sources, so they only appear when the file is opened locally with internet access.
 
 ## What's inside

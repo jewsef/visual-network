@@ -139,7 +139,7 @@ select{border:.5px solid var(--bd2);border-radius:8px;padding:8px 10px;backgroun
 <button class="btn pri" id="pick">Choose file or zip</button>
 <button class="btn" id="demo">Try demo data</button>
 </div>
-<input type="file" id="file" accept=".csv,.zip,.gz,text/csv,application/zip,application/x-zip-compressed" multiple hidden>
+<input type="file" id="file" accept=".csv,.zip,.gz,image/*,text/csv,application/zip,application/x-zip-compressed" multiple hidden>
 <ol class="steps">
 <li>On LinkedIn, open Settings, then Data privacy, then Get a copy of your data.</li>
 <li>Pick Connections only, request the archive, and download it from the email.</li>
@@ -158,7 +158,7 @@ select{border:.5px solid var(--bd2);border-radius:8px;padding:8px 10px;backgroun
 <button role="tab" id="tab-reach" aria-selected="false">Reach</button>
 <button role="tab" id="tab-access" aria-selected="false">Access</button>
 <button role="tab" id="tab-hire" aria-selected="false">Hiring</button>
-</div><button class="btn" id="reload">Load another file</button></div>
+</div><span><button class="btn" id="addphotos">Add photos</button> <button class="btn" id="reload">Load another file</button><input type="file" id="photofile" accept="image/*,.zip,application/zip" multiple hidden></span></div>
 <div id="mapview">
 
 <div class="bar">
@@ -242,13 +242,13 @@ for(var i=0;i<rows.length;i++){var r0=(rows[i][0]||'').trim().toLowerCase();if(r
 if(hi<0)throw new Error('That does not look like LinkedIn’s Connections.csv. The header row with First Name is missing.');
 var head=rows[hi].map(function(x){return x.trim().toLowerCase()});
 function col(n){return head.indexOf(n)}
-var cf=col('first name'),cl=col('last name'),cu=col('url'),cc=col('company'),cp=col('position'),cd=col('connected on');
+var cf=col('first name'),cl=col('last name'),cu=col('url'),cc=col('company'),cp=col('position'),cd=col('connected on'),cph=Math.max(col('photo url'),col('profile photo'),col('profile picture'),col('image url'));
 var out=[];
 for(var j=hi+1;j<rows.length;j++){var r=rows[j];if(!r||r.length<2)continue;
 var first=(r[cf]||'').trim(),last=(r[cl]||'').trim();
 if(!first&&!last)continue;
 var d=cd>=0?new Date(r[cd]):null;if(d&&isNaN(d.getTime()))d=null;
-out.push({first:first,last:last,url:cu>=0?(r[cu]||'').trim():'',company:cc>=0?(r[cc]||'').trim():'',title:cp>=0?(r[cp]||'').trim():'',date:d})}
+out.push({first:first,last:last,url:cu>=0?(r[cu]||'').trim():'',company:cc>=0?(r[cc]||'').trim():'',title:cp>=0?(r[cp]||'').trim():'',date:d,photo:cph>=0&&/^(https?:\/\/|data:image\/)/i.test((r[cph]||'').trim())?(r[cph]||'').trim():''})}
 if(!out.length)throw new Error('No connections found in that file.');
 return out}
 
@@ -304,7 +304,7 @@ var c=comps[k];
 if(!c){c=comps[k]={key:k,names:{},people:[],name:''};}
 var disp=r.company.trim()||'Independent / unlisted';
 c.names[disp]=(c.names[disp]||0)+1;
-var p={name:(r.first+' '+r.last).trim(),first:r.first,url:r.url,title:r.title||'No title listed',date:r.date,sen:seniority(r.title),ck:k};
+var p={name:(r.first+' '+r.last).trim(),first:r.first,url:r.url,photo:r.photo||'',title:r.title||'No title listed',date:r.date,sen:seniority(r.title),ck:k};
 c.people.push(p);people.push(p)});
 Object.keys(comps).forEach(function(k){
 var c=comps[k];
@@ -379,10 +379,35 @@ function indIcon(name,size){
 var p=pal(IND[name].hue);
 var d=h('div',{class:'ic'});d.style.cssText='width:'+size+'px;height:'+size+'px;--txc:'+p.tx;
 d.appendChild(msEl(IND[name].icon,Math.round(size*0.62)));return d}
-function initials(name,size,p){
+function initials(name,size,p,person){
 var w=name.split(/\s+/).filter(Boolean);
 var d=h('div',{class:'lg',style:'width:'+size+'px;height:'+size+'px;background:'+p.bg+';color:'+p.tx+';font-weight:500;font-size:'+Math.round(size*0.38)+'px;border-color:'+p.bd});
-d.textContent=((w[0]||'?')[0]+(w.length>1?w[w.length-1][0]:'')).toUpperCase();return d}
+d.textContent=((w[0]||'?')[0]+(w.length>1?w[w.length-1][0]:'')).toUpperCase();
+var src=person?photoOf(person):'';
+if(src){d.style.position='relative';var im=document.createElement('img');im.alt='';im.referrerPolicy='no-referrer';im.style.cssText='position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block';im.onerror=function(){im.remove()};im.src=src;d.appendChild(im)}
+return d}
+function nkey(t){return(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim()}
+function pkey(p){var u=(p.url||'').toLowerCase().replace(/\/+$/,'');return u?'u:'+u:'n:'+nkey(p.name)}
+function photoOf(p){return(S.photos&&S.photos[pkey(p)])||p.photo||''}
+function loadPhotos(){try{var o=JSON.parse(localStorage.getItem('nb_photos')||'{}');return o&&typeof o==='object'&&!Array.isArray(o)?o:{}}catch(e){return{}}}
+function savePhotos(){try{localStorage.setItem('nb_photos',JSON.stringify(S.photos));S.photoFull=false}catch(e){S.photoFull=true}}
+function resizeImg(blob){
+return(typeof createImageBitmap==='function'?createImageBitmap(blob):new Promise(function(res,rej){var u=URL.createObjectURL(blob),im=new Image();im.onload=function(){URL.revokeObjectURL(u);res(im)};im.onerror=function(){URL.revokeObjectURL(u);rej()};im.src=u})).then(function(im){
+var w=im.width||im.naturalWidth,hh=im.height||im.naturalHeight,m=Math.min(w,hh),c=document.createElement('canvas');c.width=c.height=96;
+var x=c.getContext('2d');x.drawImage(im,(w-m)/2,(hh-m)/2,m,m,0,0,96,96);if(im.close)im.close();return c.toDataURL('image/jpeg',0.82)})}
+function addPhotos(images){
+var idx={},slug={};
+S.people.forEach(function(p){var k=nkey(p.name);(idx[k]=idx[k]||[]).push(p);var m=/linkedin\.com\/in\/([^\/?#]+)/i.exec(p.url||'');if(m)slug[nkey(decodeURIComponent(m[1]).replace(/-/g,' '))]=p});
+var res={added:0,none:0,many:0},seq=Promise.resolve();
+images.forEach(function(im){seq=seq.then(function(){
+var base=im.name.replace(/\.[a-z0-9]+$/i,'').replace(/[_.\-]+/g,' ').replace(/\(\d+\)|\s\d+$/g,'').trim(),k=nkey(base),list=idx[k];
+if(!list&&base.indexOf(',')>0){var a=base.split(','),k2=nkey(a.slice(1).join(' ')+' '+a[0]);list=idx[k2]}
+if(!list&&slug[k])list=[slug[k]];
+if(!list){res.none++;return}
+if(list.length>1){res.many++;return}
+return resizeImg(new Blob([im.bytes])).then(function(u){S.photos[pkey(list[0])]=u;res.added++},function(){res.none++})})});
+return seq.then(function(){if(res.added)savePhotos();return res})}
+function photoNote(r){var t=[];if(r.added)t.push('Added '+r.added+(r.added===1?' photo':' photos'));if(r.none)t.push(r.none+' had no matching name');if(r.many)t.push(r.many+' matched more than one person');if(S.photoFull)t.push('browser storage is full, so new photos will not be kept');return(t.join('. ')||'No photos matched.')+'.'}
 
 function sortedComps(ind){
 return S.inds[ind].comps.slice().sort(function(a,b){return b.people.length-a.people.length||a.name.localeCompare(b.name)})}
@@ -447,7 +472,7 @@ var fs=r>=80?15:r>=56?13:11;
 if(it.kind==='industry')b.appendChild(indIcon(it.ind,chipSize+6));
 else if(it.kind==='company')b.appendChild(logo(it.comp,Math.max(28,Math.min(76,Math.round(r*0.66)))));
 else if(it.kind==='more'){var d=h('div',{class:'ic'});d.style.cssText='width:'+chipSize+'px;height:'+chipSize+'px';d.appendChild(msEl('more_horiz',Math.round(chipSize*0.7)));b.appendChild(d)}
-else{b.appendChild(initials(it.person.name,Math.max(24,Math.min(52,Math.round(r*0.7))),p));
+else{b.appendChild(initials(it.person.name,Math.max(24,Math.min(52,Math.round(r*0.7))),p,it.person));
 var m=monthsAgo(it.person.date);b.style.setProperty('--o',m<12?1:m<36?0.9:m<72?0.78:0.64)}
 if(it.kind==='person'){if(r>=38){var t=h('div',{class:'nm',text:it.person.title});t.style.fontSize=(r>=52?12:11)+'px';b.appendChild(t)}}
 else{
@@ -493,7 +518,7 @@ else st.textContent=hits?hits+(hits===1?' match':' matches')+' in '+bub+(bub===1
 function openSheet(p){
 var sh=document.getElementById('sheet');sh.innerHTML='';
 var pl=pal(IND[p.ind].hue);
-var top=h('div',{class:'top'},[initials(p.name,48,pl),h('div',null,[h('h2',{text:p.name}),h('p',{text:p.title})]),h('button',{class:'x','aria-label':'Close',text:'×'})]);
+var top=h('div',{class:'top'},[initials(p.name,48,pl,p),h('div',null,[h('h2',{text:p.name}),h('p',{text:p.title})]),h('button',{class:'x','aria-label':'Close',text:'×'})]);
 top.querySelector('.x').onclick=closeSheet;
 sh.appendChild(top);
 var tag=h('span',{class:'tag',style:'--bgc:'+pl.bg+';--txc:'+pl.tx+';--bdc:'+pl.bd});
@@ -507,7 +532,14 @@ cp.onclick=function(){
 var yr=p.date?p.date.getFullYear():'';
 var msg='Hi '+(p.first||'there')+', it’s been a while'+(yr?' since we connected in '+yr:'')+'. I saw you’re at '+p.company+' as '+p.title+'. How have things been?';
 try{navigator.clipboard.writeText(msg).then(function(){cp.textContent='Copied'},function(){cp.textContent='Copy blocked'})}catch(e){cp.textContent='Copy blocked'}};
-acts.appendChild(cp);sh.appendChild(acts);
+acts.appendChild(cp);
+var pin=h('input',{type:'file',accept:'image/*',hidden:'hidden'}),k=pkey(p),has=!!(S.photos&&S.photos[k]);
+var pb=h('button',{class:'btn',text:photoOf(p)?'Change photo':'Add photo'});
+pb.onclick=function(){pin.click()};
+pin.onchange=function(){var f=pin.files[0];if(!f)return;resizeImg(f).then(function(u){S.photos[k]=u;savePhotos();openSheet(p);refresh();if(S.photoFull)setNote('Browser storage is full, so this photo will not be kept after you close the tab.')},function(){pb.textContent='Could not read that image'})};
+acts.appendChild(pb);acts.appendChild(pin);
+if(has){var rb=h('button',{class:'btn',text:'Remove photo'});rb.onclick=function(){delete S.photos[k];savePhotos();openSheet(p);refresh()};acts.appendChild(rb)}
+sh.appendChild(acts);
 sh.classList.add('open')}
 function closeSheet(){document.getElementById('sheet').classList.remove('open')}
 
@@ -695,20 +727,21 @@ if(list.length>ZLIM.entries)throw new Error('That zip has too many files to open
 var seq=Promise.resolve();
 list.forEach(function(en){seq=seq.then(function(){
 var low=en.name.toLowerCase();
-if(!/\.(csv|zip|gz)$/.test(low)){acc.skipped++;return}
+if(!/\.(csv|zip|gz|jpe?g|png|webp|gif)$/.test(low)){acc.skipped++;return}
 if(en.flags&1)throw new Error('That zip is password protected. Unzip it first, then drop the CSV files.');
 acc.total+=en.us;if(acc.total>ZLIM.total)throw new Error('That zip is too large to open here.');
 return zipRead(bytes,en).then(function(data){return expand(en.name,data,depth+1,acc)})})});
 return seq}
+if(/\.(jpe?g|png|webp|gif)$/i.test(name)){acc.images.push({name:baseName(name),bytes:bytes});return Promise.resolve()}
 if(/\.(csv|txt)$/i.test(name)||depth===0){acc.files.push({name:baseName(name),text:new TextDecoder('utf-8').decode(bytes)})}
 else acc.skipped++;
 return Promise.resolve()}
 function readBuf(f){return new Promise(function(res,rej){var fr=new FileReader();fr.onload=function(){res(new Uint8Array(fr.result))};fr.onerror=function(){rej(new Error('Could not read '+f.name+'.'))};fr.readAsArrayBuffer(f)})}
 function readAny(files){
-var acc={files:[],skipped:0,total:0},seq=Promise.resolve();
+var acc={files:[],images:[],skipped:0,total:0},seq=Promise.resolve();
 [].slice.call(files).forEach(function(f){seq=seq.then(function(){return readBuf(f)}).then(function(b){return expand(f.name,b,0,acc)})});
 return seq.then(function(){
-var r={conn:null,skipped:acc.skipped,files:acc.files.length};
+var r={conn:null,skipped:acc.skipped,files:acc.files.length,images:acc.images};
 acc.files.forEach(function(f){var c=null;try{c=readConnections(f.text)}catch(x){}
 if(c&&c.length&&(!r.conn||c.length>r.conn.length))r.conn=c});
 return r})}
@@ -719,9 +752,16 @@ function handleFile(fl){
 var files=fl&&fl.length!==undefined?[].slice.call(fl):(fl?[fl]:[]);
 if(!files.length)return Promise.resolve();showErr('');
 return readAny(files).then(function(r){
-if(!r.conn)throw new Error(r.files?('No Connections.csv found in '+(files.length>1?'those files':'that file')+'. Look for a file with First Name in its header row.'):'Nothing readable found. Drop Connections.csv or a LinkedIn export zip.');
-S.isDemo=false;load(r.conn);setNote(r.files>1?'Read '+r.files+' files and found '+r.conn.length+' connections.':'')
+if(!r.conn)throw new Error(r.files||r.images.length?('No Connections.csv found in '+(files.length>1?'those files':'that file')+'. Look for a file with First Name in its header row.'):'Nothing readable found. Drop Connections.csv or a LinkedIn export zip.');
+S.isDemo=false;load(r.conn);
+if(!r.images.length){setNote(r.files>1?'Read '+r.files+' files and found '+r.conn.length+' connections.':'');return}
+return addPhotos(r.images).then(function(pr){setNote('Found '+r.conn.length+' connections. '+photoNote(pr));refresh()})
 }).catch(function(e){showErr(e&&e.message?e.message:'Could not read that file.')})}
+function handlePhotos(fl){
+var files=[].slice.call(fl||[]);if(!files.length)return Promise.resolve();
+return readAny(files).then(function(r){
+if(!r.images.length){setNote('No photos found. Name each image like "First Last.jpg", or add a photo from a person\u2019s card.');return}
+return addPhotos(r.images).then(function(pr){setNote(photoNote(pr));refresh()})}).catch(function(e){setNote(e&&e.message?e.message:'Could not read those photos.')})}
 
 var FN=['Engineering','Data & analytics','Product & design','Sales & marketing','Finance & risk','Operations','Military & intel','Academia','HR & recruiting','Executive','Other'];
 var FNS={'Engineering':'Engineering','Data & analytics':'Data','Product & design':'Product','Sales & marketing':'Sales & mktg','Finance & risk':'Finance','Operations':'Operations','Military & intel':'Military','Academia':'Academia','HR & recruiting':'HR','Executive':'Executive','Other':'Other'};
@@ -759,7 +799,7 @@ function badge(text,hue){var p=pal(hue);var b=h('span',{class:'badge2',text:text
 function personRow(p,badges){
 var pl=pal(IND[p.ind].hue);
 var r=h('button',{class:'prow'});
-r.appendChild(initials(p.name,34,pl));
+r.appendChild(initials(p.name,34,pl,p));
 var mid=h('div',{style:'flex:1;min-width:0'});
 mid.appendChild(h('div',{class:'t1',text:p.name}));
 mid.appendChild(h('div',{class:'t2',text:p.title+' · '+p.company+(p.date?' · since '+p.date.getFullYear():'')}));
@@ -962,6 +1002,9 @@ function init(){
 var drop=document.getElementById('drop'),file=document.getElementById('file');
 document.getElementById('pick').onclick=function(){file.click()};
 file.onchange=function(){handleFile(file.files)};
+S.photos=loadPhotos();
+document.getElementById('addphotos').onclick=function(){document.getElementById('photofile').click()};
+document.getElementById('photofile').onchange=function(){var f=document.getElementById('photofile');handlePhotos(f.files).then(function(){f.value=''})};
 document.getElementById('demo').onclick=function(){S.isDemo=true;load(demo())};
 ['map','reach','access','hire'].forEach(function(n){document.getElementById('tab-'+n).onclick=function(){showTab(n)}});
 document.getElementById('lnx').onclick=function(){S.noteDismissed=true;document.getElementById('logonote').remove()};
@@ -979,7 +1022,7 @@ var done=false;function fin(ok){if(done)return;done=true;if(S.iconOk!==ok){S.ico
 try{document.fonts.load("24px 'Material Symbols Rounded'",'shield').then(function(f){fin(f&&f.length>0)},function(){fin(false)})}catch(e){fin(false)}
 setTimeout(function(){fin(!!(document.fonts&&document.fonts.check&&document.fonts.check("24px 'Material Symbols Rounded'")&&S.iconOk!==false))},4000)});
 window.addEventListener('si-ready',function(){if(!document.getElementById('map').hidden)refresh()});
-window.__nb={readAny:readAny,handleFile:handleFile,zipEntries:zipEntries,isZip:isZip,fnOf:fnOf,hireOf:hireOf,accessOf:accessOf,showTab:showTab,renderReach:renderReach,renderAccess:renderAccess,renderHire:renderHire,hhiOf:hhiOf,seniorityMix:seniorityMix,warmthMix:warmthMix,byYear:byYear,renderStats:renderStats,parseCSV:parseCSV,readConnections:readConnections,normCompany:normCompany,classify:classify,seniority:seniority,load:load,demo:demo,state:S}}
+window.__nb={addPhotos:addPhotos,handlePhotos:handlePhotos,photoOf:photoOf,pkey:pkey,readAny:readAny,handleFile:handleFile,zipEntries:zipEntries,isZip:isZip,fnOf:fnOf,hireOf:hireOf,accessOf:accessOf,showTab:showTab,renderReach:renderReach,renderAccess:renderAccess,renderHire:renderHire,hhiOf:hhiOf,seniorityMix:seniorityMix,warmthMix:warmthMix,byYear:byYear,renderStats:renderStats,parseCSV:parseCSV,readConnections:readConnections,normCompany:normCompany,classify:classify,seniority:seniority,load:load,demo:demo,state:S}}
 init();
 })();
 </script>
