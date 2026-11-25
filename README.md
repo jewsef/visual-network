@@ -1,4 +1,4 @@
-# visual-network
+# Social Capital
 
 A private, local-first visualization of your LinkedIn connections. Industries open into companies, and companies open into the people and titles inside them.
 
